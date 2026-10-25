@@ -73,8 +73,8 @@ extern "C" {
 #include "muse_wifi.h"
 }
 #include "muse_chat_priv.h"
-#if CONFIG_MUSE_TTS_PROXY
-#include "muse_tts_proxy.h"
+#if CONFIG_MUSE_TTS_ELEVENLABS
+#include "muse_tts_elevenlabs.h"
 #endif
 
 #include <xplat/noise/core/ClientSession.h>
@@ -272,7 +272,7 @@ static bool open_note(void);
 static void log_marks(void);
 static int16_t *s_pcm;       /* MINIMP3_MAX_SAMPLES_PER_FRAME */
 static int16_t *s_pcm16;
-#if CONFIG_MUSE_TTS_PROXY
+#if CONFIG_MUSE_TTS_ELEVENLABS
 static uint32_t s_tts_request_id;
 static int64_t s_tts_last_packet_us;
 #endif     /* resampled output */
@@ -968,8 +968,8 @@ static void turn_reset_streams(void)
 
 static void turn_finish(void)
 {
-#if CONFIG_MUSE_TTS_PROXY
-    muse_tts_proxy_cancel();
+#if CONFIG_MUSE_TTS_ELEVENLABS
+    muse_tts_elevenlabs_cancel();
 #endif
     turn_reset_streams();
     s_turn.phase = P_IDLE;
@@ -1529,14 +1529,14 @@ static void start_tts(void)
         if (m.tts != TTS_QUEUED) {
             continue;
         }
-#if CONFIG_MUSE_TTS_PROXY
+#if CONFIG_MUSE_TTS_ELEVENLABS
         /* The HTTPS worker produces MP3 packets; only this session task
          * changes s_turn.mp3, minimp3 state and the output stream. */
-        if (s_turn.texts && muse_settings_speaker_on() && muse_tts_proxy_ready()) {
+        if (s_turn.texts && muse_settings_speaker_on() && muse_tts_elevenlabs_ready()) {
             const char *full = s_turn.texts + i * TEXT_MAX;
             uint32_t id = ++s_tts_request_id;
             if (id == 0) id = ++s_tts_request_id;
-            if (full[0] && muse_tts_proxy_submit(id, full)) {
+            if (full[0] && muse_tts_elevenlabs_submit(id, full)) {
                 m.pcm_start = s_turn.pcm_out;
                 m.pcm_frames = 0;
                 m.tts = TTS_ACTIVE;
@@ -1548,7 +1548,7 @@ static void start_tts(void)
                 s_turn.down_rate = 0;
                 mp3dec_init(&s_turn.dec);
                 s_tts_last_packet_us = now_us();
-                ESP_LOGI(TAG, "speaking message %s via HTTPS TTS proxy (%u chars)",
+                ESP_LOGI(TAG, "speaking message %s via ElevenLabs API (%u chars)",
                          m.id, (unsigned)strlen(full));
                 show_reply_start(m);
                 return;
@@ -1593,17 +1593,17 @@ static void tts_data(const uint8_t *data, size_t len)
 }
 
 
-#if CONFIG_MUSE_TTS_PROXY
+#if CONFIG_MUSE_TTS_ELEVENLABS
 /* MP3 network I/O runs on a separate FreeRTOS worker. Consume only packets
  * tagged for this request; stale packets from interrupted turns are dropped.
  * On an error with no decoded speech, retain Muse's original silent captions. */
-static void poll_proxy_tts(void)
+static void poll_elevenlabs_tts(void)
 {
     if (s_turn.tts_msg < 0 || s_turn.silent || s_turn.mp3_ended) return;
     msg_t &m = s_turn.msgs[s_turn.tts_msg];
     muse_tts_packet_t packet;
     for (int n = 0; n < 8 && MP3_BUF - s_turn.mp3_len >= MUSE_TTS_PACKET_BYTES; n++) {
-        if (!muse_tts_proxy_poll(&packet)) break;
+        if (!muse_tts_elevenlabs_poll(&packet)) break;
         if (packet.id != s_tts_request_id) continue;
         s_tts_last_packet_us = now_us();
         if (packet.kind == MUSE_TTS_DATA) {
@@ -1612,8 +1612,8 @@ static void poll_proxy_tts(void)
             s_turn.mp3_ended = true;
             break;
         } else if (packet.kind == MUSE_TTS_FAILED) {
-            ESP_LOGW(TAG, "proxy unavailable; ending or falling back to silent captions");
-            muse_tts_proxy_cancel();
+            ESP_LOGW(TAG, "ElevenLabs unavailable; ending or falling back to silent captions");
+            muse_tts_elevenlabs_cancel();
             if (!s_turn.mp3_len && s_turn.pcm_out == m.pcm_start) {
                 m.pcm_frames = (uint32_t)(m.len * MIC_RATE / TEXT_CHARS_PER_S);
                 s_turn.silent = true;
@@ -1628,7 +1628,7 @@ static void poll_proxy_tts(void)
     if (!s_turn.silent && !s_turn.mp3_ended &&
         now_us() - s_tts_last_packet_us > 25000000LL) {
         ESP_LOGW(TAG, "TTS stalled for 25 seconds; resuming Muse captions");
-        muse_tts_proxy_cancel();
+        muse_tts_elevenlabs_cancel();
         if (!s_turn.mp3_len && s_turn.pcm_out == m.pcm_start) {
             m.pcm_frames = (uint32_t)(m.len * MIC_RATE / TEXT_CHARS_PER_S);
             s_turn.silent = true;
@@ -2081,8 +2081,8 @@ static void hatch_task(void *arg)
         }
         if (s_turn.phase == P_WAIT_REPLY) {
             start_tts();
-#if CONFIG_MUSE_TTS_PROXY
-            poll_proxy_tts();
+#if CONFIG_MUSE_TTS_ELEVENLABS
+            poll_elevenlabs_tts();
 #endif
             decode();
         }
@@ -2131,8 +2131,8 @@ extern "C" void muse_hatch_start(void)
     }
     cJSON_Hooks hooks = { json_alloc, heap_caps_free };
     cJSON_InitHooks(&hooks);
-#if CONFIG_MUSE_TTS_PROXY
-    if (!muse_tts_proxy_init()) ESP_LOGW(TAG, "TTS proxy disabled; silent captions remain available");
+#if CONFIG_MUSE_TTS_ELEVENLABS
+    if (!muse_tts_elevenlabs_init()) ESP_LOGW(TAG, "TTS proxy disabled; silent captions remain available");
 #endif
     /* Keep the command/event queues out of internal DRAM, which Wi-Fi, BLE and
      * mbedTLS can exhaust: when the allocation failed here hatch_task never

@@ -32,6 +32,9 @@
 #include "muse_state.h"
 #include "muse_voice.h"
 #include "muse_wifi.h"
+#if CONFIG_MUSE_TTS_ELEVENLABS
+#include "muse_tts_elevenlabs.h"
+#endif
 
 static const char *TAG = "muse_ble";
 
@@ -159,6 +162,16 @@ static void run_command(char *cmd)
         }
     } else if (!strcmp(cmd, "hatch.test")) {
         muse_hatch_test();
+#if CONFIG_MUSE_TTS_ELEVENLABS
+    } else if (!strcmp(cmd, "tts.key")) {
+        if (muse_tts_elevenlabs_set_key(v) != ESP_OK) res = "error: invalid key";
+    } else if (!strcmp(cmd, "tts.voice")) {
+        if (muse_tts_elevenlabs_set_voice(v) != ESP_OK) res = "error: invalid voice";
+    } else if (!strcmp(cmd, "tts.clear")) {
+        muse_tts_elevenlabs_clear();
+    } else if (!strcmp(cmd, "tts.status")) {
+        res = muse_tts_elevenlabs_ready() ? "ready" : "missing credentials";
+#endif
     } else if (!strcmp(cmd, "test.loopback")) {
         muse_voice_request_loopback();
     } else if (!strcmp(cmd, "volume") && parse_int(v, 0, 100, &n)) {
@@ -176,7 +189,11 @@ static void run_command(char *cmd)
     }
 
     /* Never echo secrets back. */
-    bool secret = !strcmp(cmd, "wifi.pass") || !strncmp(cmd, "hatch.token", 11);
+    bool secret = !strcmp(cmd, "wifi.pass") || !strncmp(cmd, "hatch.token", 11)
+#if CONFIG_MUSE_TTS_ELEVENLABS
+                  || !strcmp(cmd, "tts.key")
+#endif
+                  ;
     snprintf(s_last, sizeof(s_last), "%s: %s", cmd, res);
     ESP_LOGI(TAG, "cmd %s%s%s -> %s", cmd, secret ? "" : "=", secret ? "" : v, res);
     muse_state_poke();
