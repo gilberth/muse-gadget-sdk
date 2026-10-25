@@ -2132,7 +2132,7 @@ extern "C" void muse_hatch_start(void)
     cJSON_Hooks hooks = { json_alloc, heap_caps_free };
     cJSON_InitHooks(&hooks);
 #if CONFIG_MUSE_TTS_ELEVENLABS
-    if (!muse_tts_elevenlabs_init()) ESP_LOGW(TAG, "TTS proxy disabled; silent captions remain available");
+    if (!muse_tts_elevenlabs_init()) ESP_LOGW(TAG, "ElevenLabs client unavailable; silent captions remain available");
 #endif
     /* Keep the command/event queues out of internal DRAM, which Wi-Fi, BLE and
      * mbedTLS can exhaust: when the allocation failed here hatch_task never
