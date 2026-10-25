@@ -54,6 +54,7 @@ case $board in
     jc3248w535) profile=guition-jc3248w535; target=esp32s3 ;;
     lcd7) profile=waveshare-s3-lcd7; target=esp32s3 ;;
     lcd128) profile=waveshare-s3-lcd128; target=esp32s3 ;;
+    lcd154) profile=waveshare-s3-lcd154; target=esp32s3 ;;
     vn183)   profile=vn-s3-183;            target=esp32s3 ;;
     # Its CH9102 USB-UART bridge drops out above 230400 baud.
     plus2)   profile=m5stack-stickc-plus2; target=esp32; baud=230400 ;;
@@ -135,6 +136,15 @@ if [ -n "${iris:-}" ]; then
     ws=${MOSAICO_WORKSPACE:-$(cd "$MOSAICO_UTILS/../.." && pwd)}
     [ -e "$ws/projects/muse_gadget" ] || { mkdir -p "$ws/projects" && ln -s "$root" "$ws/projects/muse_gadget"; }
     cd "$ws" && exec python3 mosaico.py iris system-update --bundle "$root/$B/muse-gadget-system-update.irisfw" ${3:+--device-id $3}
+fi
+# Experimental LCD 1.54: the vendor publishes both UART and USJ console
+# configurations. Never auto-select the only USB device and risk flashing a
+# different attached S3. Require an explicit /dev/... port for this board.
+if [ "$board" = lcd154 ]; then
+    if [[ "${3:-}" != /dev/* ]]; then
+        echo "lcd154 is experimental: pass its verified /dev/... serial port explicitly" >&2
+        exit 2
+    fi
 fi
 port=$(python "$root/tools/muse/ports.py" $board ${3:-}) || exit 1
 esptool="-m esptool"
