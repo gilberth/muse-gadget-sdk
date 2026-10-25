@@ -15,6 +15,7 @@
  */
 
 #include "muse_ble.h"
+#include "sdkconfig.h"
 
 #include <stdio.h>
 #include <stdlib.h>
