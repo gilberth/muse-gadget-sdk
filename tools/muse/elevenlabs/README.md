@@ -106,3 +106,46 @@ la síntesis remota de voz. No existe un modelo ElevenLabs local en el ESP32.
 Logs esperados: `muse_tts_elevenlabs` y `muse_chat_session`.
 El motor TTS recibe mensajes completos, hasta 1023 bytes de texto por
 mensaje (límite del almacenamiento de texto existente en Muse).
+
+
+## Diagnóstico TLS: certificado CA no encontrado
+
+Si Muse responde por texto y el comando serie `m` reproduce audio,
+pero aparecen los errores `No matching trusted root certificate found` y
+`ESP_ERR_HTTP_CONNECT`, el fallo ocurre **antes del HTTP** (no es todavía
+un fallo de Voice ID o API key).
+
+Este perfil activa el bundle completo y
+`CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_CROSS_SIGNED_VERIFY=y` para cadenas de
+CA con certificados cruzados (ESP-IDF 6.0.1). Esto **mantiene obligatoria**
+la validación del servidor.
+
+En el Mac, comprueba la cadena realmente presentada por la red, sin
+proporcionar ninguna API key:
+
+```sh
+curl -Iv --connect-timeout 10 https://api.elevenlabs.io
+echo | openssl s_client -connect api.elevenlabs.io:443 -servername api.elevenlabs.io -showcerts -verify_return_error 2>&1 | grep -E 'depth=|subject=|issuer=|Verify return code|verify error'
+```
+
+`curl` debe validar la cadena TLS incluso si la URL devuelve HTTP 404
+o 405 (el código HTTP no importa para este diagnóstico). Si `curl` falla,
+comprueba proxy TLS, DNS, hora del dispositivo y certificados de tu red.
+**No uses `skip_cert_common_name_check`, `cert_pem = NULL` o
+`CONFIG_ESP_TLS_INSECURE` para que arranque.** Nunca copies como
+"certificado confiable" uno interceptado sin verificar su procedencia.
+
+Tras actualizar el código, verifica en el `sdkconfig` efectivo (puede
+mantener ajustes de una compilación previa):
+
+```sh
+grep -E 'CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_(DEFAULT_FULL|CROSS_SIGNED_VERIFY)' build-muse-waveshare-s3-lcd154/sdkconfig
+```
+
+Si la opción `CROSS_SIGNED_VERIFY` permanece en `# ... is not set`,
+actívala en `idf.py menuconfig` bajo **Component config → mbedTLS →
+Certificate Bundle** (o recrea la configuración del perfil sin borrar
+NVS), y vuelve a compilar antes de flashear. Si aún falla tras activar
+esta opción, compara el `issuer` de la conexión del Mac con las CA
+incluidas en el bundle, en lugar de desactivar TLS.
+
