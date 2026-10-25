@@ -1,6 +1,3 @@
-# CI-only NON-SECRET build profile; never use to flash real devices.
-# Allows compile/link coverage of the direct HTTPS ElevenLabs worker, disabled by default
-# on standard board profiles. No actual API credentials or network requests are required to compile.
+# CI-only compile coverage for the direct ElevenLabs HTTPS client.
+# Credentials reside in NVS at runtime. No secrets, server or proxy required.
 CONFIG_MUSE_TTS_ELEVENLABS=y
-CONFIG_MUSE_TTS_PROXY_URL="https://tts.example.com/v1/tts"
-CONFIG_MUSE_TTS_PROXY_TOKEN="CI-DUMMY-DO-NOT-DEPLOY-NOT-A-SECRET"
