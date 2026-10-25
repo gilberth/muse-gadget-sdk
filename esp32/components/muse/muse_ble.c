@@ -197,6 +197,13 @@ static void run_command(char *cmd)
                   ;
     snprintf(s_last, sizeof(s_last), "%s: %s", cmd, res);
     ESP_LOGI(TAG, "cmd %s%s%s -> %s", cmd, secret ? "" : "=", secret ? "" : v, res);
+    /* Erase sensitive characters from the transient serial/BLE command
+     * buffer before the caller frees it. Persistence remains exclusively
+     * in NVS (or Muse's existing Wi-Fi/Hatch storage). */
+    if (secret) {
+        volatile char *p = v;
+        while (*p) *p++ = 0;
+    }
     muse_state_poke();
 
     if (s_conn != BLE_HS_CONN_HANDLE_NONE) {
